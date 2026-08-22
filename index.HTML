@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DeepSeekChat</title>
+  <meta name="description" content="DeepSeek 角色立绘驱动对话界面" />
+  <link rel="icon" type="image/jpeg" href="DeepSeekChat图标.jpg" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-theme="light" data-font="medium">
+  <!-- 背景立绘层：在桌面上位于左侧，避免被聊天卡片遮挡 -->
+  <div id="characterLayer" class="character-layer" aria-hidden="true">
+    <img id="charImgA" class="char-img visible" src="./assets/normal.png" alt="DeepSeek" />
+    <img id="charImgB" class="char-img" src="" alt="" />
+    <div id="angryRings" class="angry-rings" aria-hidden="true">
+      <span></span><span></span><span></span>
+    </div>
+  </div>
+
+  <!-- 顶部导航 -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <button id="menuBtn" class="icon-btn" title="对话列表" aria-label="对话列表">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M3 6h18M3 12h18M3 18h18"></path>
+        </svg>
+      </button>
+      <h1 class="app-title">DeepSeekChat</h1>
+      <span class="version-badge">v1.4.0</span>
+    </div>
+    <div class="topbar-right">
+      <button id="themeBtn" class="icon-btn" title="切换主题" aria-label="切换主题"></button>
+      <button id="settingsBtn" class="icon-btn" title="设置" aria-label="设置">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- 主聊天区 -->
+  <main class="main">
+    <section class="chat-card" id="chatCard">
+      <div class="chat-card-header">
+        <span id="chatTitle">新对话</span>
+        <div class="chat-header-right">
+          <select id="chatModelSelect" class="model-select" title="选择当前模型"></select>
+          <button id="renameBtn" class="icon-btn small" title="重命名当前对话">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20h9"></path>
+              <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div id="messages" class="messages"></div>
+      <div id="errorBanner" class="error-banner hidden"></div>
+      <div id="imagePreviews" class="image-previews hidden"></div>
+      <div class="input-area">
+        <button id="attachBtn" class="icon-btn" title="上传图片/文件" aria-label="上传图片/文件">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+          </svg>
+        </button>
+        <textarea id="input" rows="1" placeholder="和 DeepSeek 聊点什么…（Shift+Enter 换行）"></textarea>
+        <button id="clearBtn" class="icon-btn" title="清空当前对话" aria-label="清空当前对话">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 6h18"></path>
+            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+            <path d="M10 11v6M14 11v6"></path>
+          </svg>
+        </button>
+        <button id="sendBtn" class="send-btn" title="发送" aria-label="发送"></button>
+      </div>
+    </section>
+  </main>
+
+  <!-- 对话列表抽屉 -->
+  <aside id="conversationDrawer" class="drawer left">
+    <div class="drawer-header">
+      <h2>对话列表</h2>
+      <button id="newChatBtn" class="btn small primary">+ 新建</button>
+    </div>
+    <div id="conversationList" class="conversation-list"></div>
+  </aside>
+
+  <!-- 设置抽屉 -->
+  <aside id="settingsDrawer" class="drawer right">
+    <div class="drawer-header">
+      <h2>设置</h2>
+      <button id="closeSettingsBtn" class="icon-btn small" title="关闭">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M18 6L6 18M6 6l12 12"></path>
+        </svg>
+      </button>
+    </div>
+    <div class="drawer-body">
+      <!-- 通用 -->
+      <section class="settings-section">
+        <h3>通用</h3>
+        <label>主题
+          <select id="settingTheme">
+            <option value="system">跟随系统</option>
+            <option value="light">日间</option>
+            <option value="dark">夜间</option>
+          </select>
+        </label>
+        <label>字体大小
+          <select id="settingFontSize">
+            <option value="small">小</option>
+            <option value="medium" selected>中</option>
+            <option value="large">大</option>
+          </select>
+        </label>
+      </section>
+
+      <!-- 提示词 -->
+      <section class="settings-section">
+        <h3>提示词</h3>
+        <label>当前对话 System Prompt（可为空）
+          <textarea id="settingSystemPrompt" rows="4" placeholder="在这里填写提示词，留空也可以"></textarea>
+        </label>
+        <div class="row">
+          <button id="saveSystemPromptBtn" class="btn small">保存到当前对话</button>
+        </div>
+      </section>
+
+      <!-- API -->
+      <section class="settings-section">
+        <h3>API</h3>
+        <label>提供商
+          <select id="settingProvider">
+            <option value="openai">OpenAI 协议</option>
+            <option value="anthropic">Anthropic 协议</option>
+            <option value="custom">自定义协议</option>
+          </select>
+        </label>
+        <label>已保存 Key
+          <select id="settingActiveKey"></select>
+        </label>
+        <label>Key 名称
+          <input id="settingKeyName" type="text" placeholder="例如：主账号" />
+        </label>
+        <label>API Key
+          <input id="settingApiKey" type="password" placeholder="输入密钥" autocomplete="off" />
+        </label>
+        <div class="row">
+          <button id="saveKeyBtn" class="btn small">保存这组 Key</button>
+          <button id="deleteKeyBtn" class="btn small danger">删除当前</button>
+        </div>
+        <label>Base URL
+          <input id="settingBaseUrl" type="text" placeholder="https://api.example.com/v1" />
+        </label>
+        <label>模型名
+          <input id="settingModel" type="text" list="modelOptions" placeholder="模型名称" />
+        </label>
+        <datalist id="modelOptions"></datalist>
+        <div class="row">
+          <button id="fetchModelsBtn" class="btn small">测试连接并获取模型</button>
+          <span id="modelFetchStatus" class="muted-text"></span>
+        </div>
+
+        <div id="customProtocolFields" class="custom-fields hidden">
+          <h3>自定义协议配置</h3>
+          <label>请求路径
+            <input id="settingCustomPath" type="text" placeholder="/v1/chat" />
+          </label>
+          <label>请求方法
+            <select id="settingCustomMethod">
+              <option value="POST">POST</option>
+              <option value="GET">GET</option>
+            </select>
+          </label>
+          <label>请求体模板（JSON，支持变量）
+            <textarea id="settingCustomBody" rows="4" placeholder='{"model":"{{model}}","input":"{{messages}}"}'></textarea>
+          </label>
+          <label>响应文本提取路径
+            <input id="settingCustomResponsePath" type="text" placeholder="data.output" />
+          </label>
+          <label class="checkbox">
+            <input id="settingCustomStream" type="checkbox" />
+            启用流式响应
+          </label>
+          <label>自定义模型列表地址（可选）
+            <input id="settingCustomModelsUrl" type="text" placeholder="https://api.example.com/v1/models" />
+          </label>
+          <label>自定义模型列表提取路径
+            <input id="settingCustomModelsPath" type="text" placeholder="data" />
+          </label>
+        </div>
+
+        <label>请求头模板（JSON）
+          <textarea id="settingCustomHeaders" rows="3" placeholder='{"Authorization":"Bearer ..."}'></textarea>
+        </label>
+        <label class="checkbox">
+          <input id="settingProxyEnabled" type="checkbox" />
+          启用代理（CORS 代理 / 本地代理）
+        </label>
+        <label>代理前缀
+          <input id="settingProxyPrefix" type="text" placeholder="http://localhost:8787/" />
+        </label>
+      </section>
+
+      <!-- 模型参数 -->
+      <section class="settings-section">
+        <h3>模型参数</h3>
+        <label>温度 <span id="temperatureValue"></span>
+          <input id="settingTemperature" type="range" min="0" max="2" step="0.1" />
+        </label>
+        <label>Top-p <span id="topPValue"></span>
+          <input id="settingTopP" type="range" min="0" max="1" step="0.05" />
+        </label>
+        <label>最大输出长度
+          <input id="settingMaxTokens" type="number" min="1" step="1" />
+        </label>
+        <label>最大上下文长度（粗略 token 预算）
+          <input id="settingMaxContext" type="number" min="256" step="128" />
+        </label>
+        <details>
+          <summary>高级参数</summary>
+          <label>Frequency Penalty
+            <input id="settingFrequencyPenalty" type="number" min="-2" max="2" step="0.1" />
+          </label>
+          <label>Presence Penalty
+            <input id="settingPresencePenalty" type="number" min="-2" max="2" step="0.1" />
+          </label>
+        </details>
+      </section>
+
+      <!-- 对话与压缩 -->
+      <section class="settings-section">
+        <h3>对话与压缩</h3>
+        <label>上下文压缩阈值（消息条数）
+          <input id="settingCompressThreshold" type="number" min="2" step="1" />
+        </label>
+        <label>压缩策略
+          <select id="settingCompressStrategy">
+            <option value="summary">AI 摘要</option>
+            <option value="discard">直接丢弃早期消息</option>
+          </select>
+        </label>
+        <label class="checkbox">
+          <input id="settingAutoCompress" type="checkbox" />
+          自动压缩超长上下文
+        </label>
+        <div class="row">
+          <button id="compressNowBtn" class="btn small">立即压缩当前对话</button>
+        </div>
+      </section>
+
+      <!-- 音效与特效 -->
+      <section class="settings-section">
+        <h3>音效与特效</h3>
+        <label class="checkbox">
+          <input id="settingSoundEnabled" type="checkbox" />
+          打字音效
+        </label>
+        <label class="checkbox">
+          <input id="settingEffectsEnabled" type="checkbox" />
+          情绪视觉特效
+        </label>
+        <label>音量 <input id="settingVolume" type="range" min="0" max="1" step="0.05" /></label>
+      </section>
+
+      <!-- 日志 -->
+      <section class="settings-section">
+        <h3>日志</h3>
+        <p>查看 API 请求、错误信息和立绘切换记录。</p>
+        <div class="row">
+          <button id="openLogBtn" class="btn small">打开日志面板</button>
+        </div>
+      </section>
+
+      <!-- 关于 -->
+      <section class="settings-section">
+        <h3>关于</h3>
+        <p>版本：v1.4.0</p>
+        <p>GitHub：暂未填写</p>
+        <p>反馈：Thecookfish@Foxmail.com</p>
+        <div class="row">
+          <button id="resetSettingsBtn" class="btn small danger">恢复默认设置</button>
+        </div>
+      </section>
+    </div>
+  </aside>
+
+  <div id="drawerMask" class="drawer-mask hidden"></div>
+
+  <!-- 日志面板（入口在设置中） -->
+  <aside id="logPanel" class="log-panel hidden">
+    <div class="log-header">
+      <span>日志</span>
+      <button id="closeLogBtn" class="icon-btn small" title="关闭">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M18 6L6 18M6 6l12 12"></path>
+        </svg>
+      </button>
+    </div>
+    <div id="logList" class="log-list"></div>
+    <button id="clearLogBtn" class="btn small">清空日志</button>
+  </aside>
+
+  <!-- 特效画布 -->
+  <canvas id="fxCanvas" class="fx-canvas"></canvas>
+
+  <!-- 首次使用引导 -->
+  <div id="setupModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <h2>欢迎使用 DeepSeekChat</h2>
+      <p>检测到你还没有配置 API Key。请先进入设置填写 API 信息，之后就可以和 DeepSeek 聊天了。</p>
+      <div class="row">
+        <button id="setupGoBtn" class="btn primary">去设置</button>
+        <button id="setupLaterBtn" class="btn">稍后再说</button>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="fileInput" accept="image/*,application/pdf,text/*,application/json" multiple hidden />
+
+  <script src="app.js"></script>
+</body>
+</html>
