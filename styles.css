@@ -75,6 +75,11 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-drag: none;
 }
 
 .character-layer.tap .char-img.visible {
@@ -95,6 +100,13 @@ body {
   height: 100%;
   object-fit: contain;
   opacity: 0;
+  pointer-events: auto;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-drag: none;
   transition: opacity 0.3s ease;
   will-change: opacity, transform;
   transform: translateZ(0);
@@ -207,6 +219,7 @@ body {
   align-items: center;
   justify-content: flex-end;
   padding: 72px 24px 24px;
+  pointer-events: none; /* 让空白区域点击穿透到立绘层 */
 }
 
 .chat-card {
@@ -214,6 +227,7 @@ body {
   height: min(720px, calc(100vh - 96px));
   display: flex;
   flex-direction: column;
+  pointer-events: auto;
   background: var(--card);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
