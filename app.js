@@ -94,6 +94,7 @@ const EMOTION_ASSETS = {
   nervous: 'nervous.png',
   silly: 'silly.png',
   eating: 'eating.png',
+  hit: 'hit.png',
 };
 
 /* 情绪别名归一化 */
@@ -108,6 +109,7 @@ const EMOTION_ALIASES = {
   '傻乐呵': 'silly', '傻笑': 'silly', '流口水': 'silly', '呆萌': 'silly', 'silly': 'silly',
   '干饭': 'eating', '吃token': 'eating', '吃饭': 'eating', '饿了': 'eating', 'eating': 'eating',
   '被震撼': 'sad', '震惊': 'sad', '震撼': 'sad', 'shocked': 'sad',
+  '受击打': 'hit', '击打': 'hit', '挨打': 'hit', 'hit': 'hit',
 };
 
 /* ---------------- 全局状态 ---------------- */
@@ -127,6 +129,8 @@ if (!Array.isArray(logs)) logs = [];
 
 let currentEmotion = 'normal';
 let emotionResetTimer = null;
+let hitPreviousEmotion = null;
+let hitShakeRAF = null;
 let charFrontIsA = true;
 let isStreaming = false;
 let abortController = null;
@@ -188,6 +192,8 @@ function init() {
   sendBtn.innerHTML = ICONS.send;
   preloadCharacterImages();
   charImgA.onerror = () => { charImgA.src = './assets/calm.png'; };
+  charImgA.setAttribute('draggable', 'false');
+  charImgB.setAttribute('draggable', 'false');
   renderConversationList();
   renderMessages();
   refreshSettingsForm();
@@ -258,6 +264,7 @@ function switchConversation(id, silent = false) {
   renderMessages();
   refreshSettingsForm();
   // 新建/切换对话时立绘回到常态
+  cancelHitAnimation();
   switchEmotion('normal', { effect: false, log: true });
   if (!silent) closeDrawers();
   addLog('info', `切换到对话：${getActiveConversation().title}`);
@@ -727,19 +734,23 @@ function preloadCharacterImages() {
   });
 }
 
-function switchEmotion(state, { effect = true, log = true } = {}) {
+function switchEmotion(state, { effect = true, log = true, temporary = false } = {}) {
   const normalized = normalizeEmotion(state);
   if (normalized === currentEmotion) {
     return;
   }
+  // 如果不是切到受击状态，且当前正处在受击打动画中，先取消受击动画
+  if (normalized !== 'hit' && hitPreviousEmotion !== null) {
+    cancelHitAnimation();
+  }
   currentEmotion = normalized;
 
-  // 非常态情绪 30 秒后自动回到常态；常态无需切换
+  // 非常态情绪 30 秒后自动回到常态；常态无需切换（temporary 用于受击打等临时状态，不启动 30 秒计时）
   if (emotionResetTimer) {
     clearTimeout(emotionResetTimer);
     emotionResetTimer = null;
   }
-  if (normalized !== 'normal') {
+  if (normalized !== 'normal' && !temporary) {
     emotionResetTimer = setTimeout(() => {
       emotionResetTimer = null;
       if (currentEmotion !== 'normal') {
@@ -822,33 +833,102 @@ function playTypeSound() {
   typeSoundClock = now + 0.05;
 }
 
-function playCharacterTapSound() {
+function playHitSound() {
   if (!settings.soundEnabled || settings.volume <= 0) return;
   ensureAudio();
   if (!audioCtx) return;
   const t = audioCtx.currentTime;
+  // 低频撞击声
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
   osc.type = 'sine';
-  osc.frequency.setValueAtTime(520, t);
-  osc.frequency.exponentialRampToValueAtTime(880, t + 0.09);
+  osc.frequency.setValueAtTime(180, t);
+  osc.frequency.exponentialRampToValueAtTime(60, t + 0.18);
   osc.connect(gain);
   gain.connect(audioCtx.destination);
-  const vol = Math.max(0.001, settings.volume * 0.3);
+  const vol = Math.max(0.001, settings.volume * 0.35);
   gain.gain.setValueAtTime(0.0001, t);
   gain.gain.exponentialRampToValueAtTime(vol, t + 0.01);
-  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
   osc.start(t);
-  osc.stop(t + 0.15);
+  osc.stop(t + 0.25);
+  // 高频“啪”声，增强击打感
+  scheduleEffectTone(900, t + 0.02, 0.06, 'triangle', 0.12);
 }
 
-function triggerCharacterTap() {
+function playHitShake() {
+  const visible = charFrontIsA ? charImgA : charImgB;
+  if (!visible) return;
+  const start = performance.now();
+  const duration = 1400;
+  if (hitShakeRAF) cancelAnimationFrame(hitShakeRAF);
+
+  function step(now) {
+    const t = (now - start) / duration;
+    if (t >= 1) {
+      visible.style.transform = '';
+      hitShakeRAF = null;
+      // 抖动几乎停止后，切回点击前的立绘
+      if (hitPreviousEmotion !== null) {
+        const prev = hitPreviousEmotion;
+        hitPreviousEmotion = null;
+        switchEmotion(prev, { effect: false, log: true });
+      }
+      return;
+    }
+    // 振幅/速度包络：由慢变快，接近结束时快速衰减停止
+    let env = Math.sin(Math.PI * Math.min(t, 1));
+    if (t > 0.85) env *= Math.max(0, 1 - (t - 0.85) / 0.15);
+    const amp = 1 + 16 * env;
+    const speed = 4 + 18 * env;
+    const x = Math.sin(t * speed * Math.PI * 2) * amp;
+    visible.style.transform = `translateX(${x}px)`;
+    hitShakeRAF = requestAnimationFrame(step);
+  }
+  hitShakeRAF = requestAnimationFrame(step);
+}
+
+function hitParticleEffect(x, y) {
+  for (let i = 0; i < 18; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 2 + Math.random() * 4;
+    addFxParticle({
+      type: 'spark',
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 1,
+      life: 0.5 + Math.random() * 0.5,
+      color: Math.random() > 0.5 ? '#ffffff' : '#bcd9ff',
+      size: 2 + Math.random() * 2,
+    });
+  }
+}
+
+function cancelHitAnimation() {
+  if (hitShakeRAF) {
+    cancelAnimationFrame(hitShakeRAF);
+    hitShakeRAF = null;
+  }
+  const visible = charFrontIsA ? charImgA : charImgB;
+  if (visible) visible.style.transform = '';
+  hitPreviousEmotion = null;
+}
+
+function triggerCharacterTap(event) {
   if (!characterLayer) return;
-  characterLayer.classList.remove('tap');
-  void characterLayer.offsetWidth;
-  characterLayer.classList.add('tap');
-  setTimeout(() => characterLayer.classList.remove('tap'), 450);
-  playCharacterTapSound();
+  // 若还未进入受击状态，记录点击前的立绘
+  if (hitPreviousEmotion === null) {
+    hitPreviousEmotion = currentEmotion;
+  }
+  // 统一切到受击打立绘
+  switchEmotion('hit', { effect: false, log: true, temporary: true });
+  playHitSound();
+  playHitShake();
+
+  const x = event && typeof event.clientX === 'number' ? event.clientX : innerWidth / 2;
+  const y = event && typeof event.clientY === 'number' ? event.clientY : innerHeight / 2;
+  hitParticleEffect(x, y);
 }
 
 /* ============================================================
@@ -2017,8 +2097,14 @@ function bindEvents() {
     addLog('api', `切换模型：${settings.model || '未选择'}`);
   });
 
-  // 点击立绘：抖动反馈 + 音效
+  // 点击立绘：抖动反馈 + 音效；同时屏蔽长按/系统蓝色选中高亮
+  const preventCharMenu = (e) => e.preventDefault();
   characterLayer.addEventListener('click', triggerCharacterTap);
+  characterLayer.addEventListener('contextmenu', preventCharMenu);
+  charImgA.addEventListener('click', triggerCharacterTap);
+  charImgA.addEventListener('contextmenu', preventCharMenu);
+  charImgB.addEventListener('click', triggerCharacterTap);
+  charImgB.addEventListener('contextmenu', preventCharMenu);
 
   // 设置：实时保存
   const liveSettingIds = [
