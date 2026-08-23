@@ -39,7 +39,7 @@ function escapeHTML(str) {
 const DEFAULT_SYSTEM_PROMPT = `你是 DeepSeek，一位深海主题的拟人智能助手。
 你性格温柔、活泼、有亲和力，可以适当带一点拟人化情绪。
 请用中文回复，口语化、自然、简洁。
-回复时请在文本末尾附加情绪标签，例如 [emotion=常态]、[emotion=开心]、[emotion=惊喜]、[emotion=思索]、[emotion=悲伤]、[emotion=愤怒]。
+请尽量在每一轮回复末尾附加情绪标签，例如 [emotion=常态]、[emotion=开心]、[emotion=惊喜]、[emotion=思索]、[emotion=悲伤]、[emotion=愤怒]；语境有明显情绪时请更频繁地切换表情。
 标签只用于前端立绘切换，不要写进最终对话内容里。`;
 
 const PRESET_PROMPTS = {
@@ -146,7 +146,6 @@ const messagesEl = $('#messages');
 const errorBanner = $('#errorBanner');
 const inputEl = $('#input');
 const sendBtn = $('#sendBtn');
-const clearBtn = $('#clearBtn');
 const attachBtn = $('#attachBtn');
 const fileInput = $('#fileInput');
 const imagePreviews = $('#imagePreviews');
@@ -174,6 +173,8 @@ const ICONS = {
   sun: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path></svg>`,
   pencil: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`,
   trash: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6M14 11v6"></path></svg>`,
+  copy: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`,
+  regenerate: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10"></path></svg>`,
 };
 
 /* ============================================================
@@ -256,6 +257,8 @@ function switchConversation(id, silent = false) {
   renderConversationList();
   renderMessages();
   refreshSettingsForm();
+  // 新建/切换对话时立绘回到常态
+  switchEmotion('normal', { effect: false, log: true });
   if (!silent) closeDrawers();
   addLog('info', `切换到对话：${getActiveConversation().title}`);
 }
@@ -376,8 +379,95 @@ function createMessageNode(msg) {
     bubble.appendChild(meta);
   }
 
+  // 消息操作按钮（非流式中显示；使用 SVG 图标，不用 emoji）
+  if (!msg.streaming) {
+    const actions = document.createElement('div');
+    actions.className = 'message-actions';
+
+    const makeAction = (title, icon, handler) => {
+      const btn = document.createElement('button');
+      btn.className = 'msg-action';
+      btn.title = title;
+      btn.innerHTML = icon;
+      btn.addEventListener('click', handler);
+      actions.appendChild(btn);
+    };
+
+    makeAction('复制', ICONS.copy, () => copyMessageText(msg));
+
+    if (msg.role === 'user') {
+      makeAction('修改', ICONS.pencil, () => editUserMessage(msg.id));
+    } else if (msg.role === 'assistant' && !msg.error) {
+      makeAction('重新生成', ICONS.regenerate, () => regenerateAssistantMessage(msg.id));
+    }
+
+    makeAction('删除', ICONS.trash, () => deleteMessage(msg.id));
+    bubble.appendChild(actions);
+  }
+
   wrapper.appendChild(bubble);
   return wrapper;
+}
+
+function copyMessageText(msg) {
+  const text = msg.content || '';
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+  } else {
+    fallbackCopy(text);
+  }
+}
+
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); } catch (e) { /* noop */ }
+  document.body.removeChild(ta);
+}
+
+function editUserMessage(id) {
+  const convo = getActiveConversation();
+  const msg = convo.messages.find((m) => m.id === id && m.role === 'user');
+  if (!msg) return;
+  const newText = prompt('修改用户消息', msg.content);
+  if (newText === null) return;
+  msg.content = newText;
+  msg.updatedAt = Date.now();
+  saveState();
+  renderMessages();
+  addLog('info', '已修改用户消息');
+}
+
+function deleteMessage(id) {
+  const convo = getActiveConversation();
+  const idx = convo.messages.findIndex((m) => m.id === id);
+  if (idx === -1) return;
+  convo.messages.splice(idx, 1);
+  saveState();
+  renderMessages();
+  addLog('info', '已删除一条消息');
+}
+
+function regenerateAssistantMessage(id) {
+  const convo = getActiveConversation();
+  const idx = convo.messages.findIndex((m) => m.id === id && m.role === 'assistant');
+  if (idx === -1) return;
+  if (isStreaming) {
+    alert('正在生成回复，请稍候');
+    return;
+  }
+  if (idx !== convo.messages.length - 1) {
+    alert('目前只能重新生成最后一条 AI 回复');
+    return;
+  }
+  convo.messages.splice(idx, 1);
+  saveState();
+  renderMessages();
+  requestAssistantReply(convo);
 }
 
 function renderMessages() {
@@ -462,8 +552,21 @@ async function requestAssistantReply(convo) {
   saveState();
   renderMessages();
 
-  // 新一轮回复开始时回到常态
-  switchEmotion('normal', { effect: false, log: true });
+  // 取最后一条用户消息，用于情绪推断
+  const lastUserMsg = [...convo.messages].reverse().find((m) => m.role === 'user' && !m.error);
+  const userTextForContext = lastUserMsg ? (lastUserMsg.content || '') : '';
+
+  const systemPrompt = convo.systemPrompt !== undefined && convo.systemPrompt !== null
+    ? convo.systemPrompt
+    : (settings.systemPrompt || DEFAULT_SYSTEM_PROMPT);
+
+  // 新一轮回复开始时：先根据用户语境触发情绪，更灵敏
+  const initialEmotion = inferEmotionFromText(userTextForContext);
+  if (initialEmotion !== 'normal') {
+    switchEmotion(initialEmotion, { effect: true, log: true });
+  } else {
+    switchEmotion('normal', { effect: false, log: true });
+  }
 
   isStreaming = true;
   sendBtn.disabled = true;
@@ -479,14 +582,10 @@ async function requestAssistantReply(convo) {
   let displayText = '';
   let lastEmotion = null;
 
-  const systemPrompt = convo.systemPrompt !== undefined && convo.systemPrompt !== null
-    ? convo.systemPrompt
-    : (settings.systemPrompt || DEFAULT_SYSTEM_PROMPT);
-
   try {
     await streamApi({
       messages: apiMessagesForRequest,
-      systemPrompt,
+      systemPrompt: systemPrompt,
       signal: abortController.signal,
       onDelta: (chunk) => {
         rawContent += chunk;
@@ -499,9 +598,15 @@ async function requestAssistantReply(convo) {
         if (streamTargetEl) streamTargetEl.textContent = displayText || '…';
         scrollToBottom();
 
-        if (parsed.emotion && parsed.emotion !== lastEmotion) {
-          lastEmotion = parsed.emotion;
-          switchEmotion(parsed.emotion, { effect: true, log: true });
+        let detectedEmotion = parsed.emotion;
+        if (!detectedEmotion) {
+          // 没有显式标签时，用本地语境推断，让立绘触发更频繁、更灵动
+          const inferred = inferEmotionFromText(displayText);
+          if (inferred !== 'normal') detectedEmotion = inferred;
+        }
+        if (detectedEmotion && detectedEmotion !== lastEmotion) {
+          lastEmotion = detectedEmotion;
+          switchEmotion(detectedEmotion, { effect: true, log: true });
         }
       },
     });
@@ -515,10 +620,11 @@ async function requestAssistantReply(convo) {
 
     const finalParsed = parseEmotionTags(rawContent);
     displayText = finalParsed.clean;
+    let finalEmotion = finalParsed.emotion || inferEmotionFromText(displayText);
     if (lastEmotion) {
       // 已处理
-    } else if (finalParsed.emotion) {
-      lastEmotion = finalParsed.emotion;
+    } else if (finalEmotion && finalEmotion !== 'normal') {
+      lastEmotion = finalEmotion;
       switchEmotion(lastEmotion, { effect: true, log: true });
     } else {
       switchEmotion('normal', { effect: false, log: true });
@@ -596,6 +702,19 @@ function normalizeEmotion(input) {
   if (!input) return 'normal';
   const key = String(input).trim();
   return EMOTION_ALIASES[key] || EMOTION_ALIASES[key.toLowerCase()] || 'normal';
+}
+
+/* 本地情绪推断：没有显式标签时也根据语境触发，让立绘更灵敏、更生动 */
+function inferEmotionFromText(text) {
+  if (!text) return 'normal';
+  const t = String(text);
+
+  if (/(谢谢|感谢|夸奖|夸我|厉害|好棒|真棒|太棒|优秀|聪明|喜欢|爱你|表白|神仙|膜拜|惊喜)/.test(t)) return 'surprised';
+  if (/(生气|愤怒|讨厌|烦死|气死|可恶|混蛋|滚|不满|批评|骂我|过分)/.test(t)) return 'angry';
+  if (/(伤心|难过|哭|委屈|悲伤|难受|失望|失败|孤独|心痛)/.test(t)) return 'sad';
+  if (/(哈哈|嘻嘻|开心|高兴|快乐|好笑|有趣|笑死|逗死|好玩)/.test(t)) return 'happy';
+  if (/(为什么|怎么|如何|是什么|分析|解释|复杂|思考|问题|总结|代码|逻辑|方案|原因)/.test(t)) return 'thinking';
+  return 'normal';
 }
 
 /* ============================================================
@@ -1857,22 +1976,6 @@ function bindEvents() {
 
   // 重命名
   $('#renameBtn').addEventListener('click', () => renameConversation(activeConversationId));
-
-  // 清空
-  clearBtn.addEventListener('click', () => {
-    const convo = getActiveConversation();
-    if (isStreaming) {
-      alert('正在生成回复，请稍候再清空。');
-      return;
-    }
-    if (!convo.messages.length) return;
-    if (!confirm('清空当前对话的所有消息？')) return;
-    convo.messages = [];
-    convo.updatedAt = Date.now();
-    saveState();
-    renderMessages();
-    addLog('info', '已清空当前对话');
-  });
 
   // 输入
   sendBtn.addEventListener('click', handleSend);
