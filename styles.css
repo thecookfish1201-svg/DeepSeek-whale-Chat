@@ -167,6 +167,7 @@ body {
   font-weight: 700;
   letter-spacing: 0.2px;
   margin: 0;
+  white-space: nowrap;
 }
 
 .version-badge {
@@ -308,6 +309,38 @@ body {
   margin-top: 4px;
   text-align: right;
   opacity: 0.85;
+}
+
+.message-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  justify-content: flex-end;
+}
+
+.msg-action {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--muted);
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.msg-action:hover {
+  background: var(--card-strong);
+  color: var(--text);
+}
+
+.msg-action svg {
+  width: 14px;
+  height: 14px;
 }
 
 .message-images {
@@ -751,7 +784,7 @@ summary { cursor: pointer; font-size: 13px; }
 /* ---------------- 移动端 ---------------- */
 @media (max-width: 768px) {
   :root { --char-opacity: 1; }
-  /* 手机端：立绘放在顶部区域，聊天区放下面，互不遮挡 */
+  /* 手机端：立绘放在顶部区域，聊天区放下面，互不遮挡（v1.1 布局） */
   .character-layer {
     left: 0;
     right: 0;
@@ -770,6 +803,8 @@ summary { cursor: pointer; font-size: 13px; }
     border-radius: 18px;
   }
   .model-select { max-width: 120px; }
+  .app-title { font-size: 14px; }
+  .version-badge { font-size: 10px; padding: 1px 5px; }
   .drawer { width: 300px; }
   .log-panel { right: 12px; bottom: 16px; width: calc(100vw - 24px); }
   .bubble { max-width: 88%; }
