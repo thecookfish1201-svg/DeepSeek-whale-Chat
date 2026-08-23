@@ -33,6 +33,7 @@ const ASSET_MAP = [
   ['DeepSeek（紧张、心虚、害怕）.png', 'nervous.png'],
   ['DeepSeek（傻乐呵、“流口水”）.png', 'silly.png'],
   ['DeepSeek（干饭、吃token）.png', 'eating.png'],
+  ['受击打.png', 'hit.png'],
 ];
 
 // 判断是否为绿幕像素
